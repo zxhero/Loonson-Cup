@@ -45,6 +45,7 @@ module cache_wrapper(
   output wire [31:0]      M_AXI_ARADDR,
   output wire [2:0] M_AXI_ARSIZE,
   output wire M_AXI_ARVALID,
+  output wire [3:0] M_AXI_ARLEN,
   input  wire M_AXI_ARREADY,
   ////////////////////////////////////////////////////////////////////////////
   // Master Interface Read Data
@@ -87,7 +88,7 @@ module cache_wrapper(
     wire            pc_arvalid;
     wire            pc_arready;
     wire    [31:0]  pc_araddr;
-    wire    [7:0]   pc_arlen;
+    wire    [3:0]   pc_arlen;
     wire            pc_wready;
     wire            pc_awready;
     wire            pc_bvalid;
@@ -133,17 +134,18 @@ module cache_wrapper(
     reg             pc_rvalid_slot;
     reg     [31:0]  inst_slot;
     
-    assign          Inst_Req_Ack = pc_arvalid & pc_arready;
-    assign          instruction = {(pc_rdata & {32{wait_inst_state}}) | (inst_slot & {32{wait_mem_state}})};
-    assign          Inst_Valid = (pc_rvalid & wait_inst_state & ~Flush) | (pc_rvalid_slot);
+    assign          Inst_Req_Ack = pc_arvalid & pc_arready | Flush;
+    assign          instruction = {(pc_rdata & {32{wait_inst_state}})} ;//| (inst_slot & {32{wait_mem_state}})};
+    assign          Inst_Valid = (pc_rvalid & wait_inst_state & ~Flush) ;//| (pc_rvalid_slot);
     
     assign          Mem_Req_Ack = (MemRead & mem_arvalid & mem_arready) | (MemWrite & wdata_fifo_ready & waddr_fifo_ready);
     assign          Read_data = mem_rdata;
     assign          Read_data_Valid = mem_rvalid;
     
-    assign          pc_rready = (Inst_Ack & wait_inst_state) | flush_state | wait_mem_state;
+    assign          pc_rready = (Inst_Ack & wait_inst_state) | flush_state ;//| wait_mem_state;
     assign          pc_arvalid = Inst_Req_Valid;
     assign          pc_araddr = PC;
+    assign          pc_rlast = pc_rvalid;
     assign          pc_arlen = 'd0;
     
     assign          mem_rready = Read_data_Ack;
@@ -175,7 +177,7 @@ module cache_wrapper(
                     mem_awvalid <= mem_awvalid;
     end
      
-    always @(posedge M_AXI_ACLK)
+   /* always @(posedge M_AXI_ACLK)
     begin
             if(~M_AXI_ARESETN)
                     inst_slot <= 'd0;
@@ -183,7 +185,7 @@ module cache_wrapper(
                     inst_slot <= pc_rdata;
             else
                     inst_slot <= inst_slot;
-    end
+    end*/
 
     always @(posedge M_AXI_ACLK)
     begin
@@ -213,7 +215,7 @@ module cache_wrapper(
     begin
             if(~M_AXI_ARESETN)
                     flush_state <= 1'b0;
-            else if((pc_arvalid | wait_inst_state) && ~flush_state && Flush)
+            else if(((pc_arvalid && pc_arready) || wait_inst_state) && ~flush_state && Flush && ~(pc_rready && pc_rvalid))
                     flush_state <= 1'b1;
             else if(pc_rready && pc_rvalid && flush_state && ~wait_inst_state)
                     flush_state <= 1'b0;
@@ -225,9 +227,9 @@ module cache_wrapper(
     begin
             if(~M_AXI_ARESETN)
                     wait_inst_state <= 1'b0;
-            else if(~pc_req_fifo_empty && ~wait_inst_state && ~flush_state && ~wait_mem_state && ~Flush)
+            else if(pc_arvalid && pc_arready  && ~Flush)
                     wait_inst_state <= 1'b1;
-            else if((wait_inst_state && Flush && ~flush_state) || (pc_rready && pc_rvalid && wait_inst_state && ~flush_state) || (wait_inst_state && D_mem_arvalid && ~wait_mem_state))
+            else if((wait_inst_state && Flush && ~flush_state) || (pc_rready && pc_rvalid && wait_inst_state && ~flush_state) )//|| (wait_inst_state && D_mem_arvalid && ~wait_mem_state))
                     wait_inst_state <= 1'b0;
             else
                     wait_inst_state <= wait_inst_state;
@@ -240,7 +242,7 @@ module cache_wrapper(
             .resetn (M_AXI_ARESETN),
             .clk    (M_AXI_ACLK),
     
-            .complete   ((Inst_Valid & Inst_Ack) | (pc_rvalid & pc_rready & flush_state)),
+            .complete   ((Inst_Valid & Inst_Ack) | (pc_rvalid & pc_rready & (flush_state | Flush))),
             .wdata_pack (PC),
             .valid      (pc_arvalid && pc_arready),
     
@@ -251,7 +253,7 @@ module cache_wrapper(
     );
     
     FIFO #(
-            .QUEUE_LENGTH('d4),
+            .QUEUE_LENGTH('d2),
             .DATA_WEDTH('d36)
     )wdata_fifo(
             .resetn (M_AXI_ARESETN),
@@ -259,7 +261,7 @@ module cache_wrapper(
             
             .complete   (mem_wvalid & mem_wready),
             .wdata_pack ({Write_strb, Write_data}),
-            .valid      (MemWrite),
+            .valid      (MemWrite & Mem_Req_Ack),
             
             .ready      (wdata_fifo_ready),
             .rdata_pack ({mem_wstrb, mem_wdata}),
@@ -268,7 +270,7 @@ module cache_wrapper(
     );
     
     FIFO #(
-            .QUEUE_LENGTH('d4),
+            .QUEUE_LENGTH('d2),
             .DATA_WEDTH('d32)
     )waddr_fifo(
             .resetn (M_AXI_ARESETN),
@@ -276,7 +278,7 @@ module cache_wrapper(
     
             .complete   (mem_awvalid & mem_awready),
             .wdata_pack (Address),
-            .valid      (MemWrite),
+            .valid      (MemWrite & Mem_Req_Ack),
     
             .ready      (waddr_fifo_ready),
             .rdata_pack (mem_awaddr),
@@ -312,10 +314,36 @@ module cache_wrapper(
             .m_rvalid           (D_mem_rvalid),
             .m_rready            (D_mem_rready)
     );
-    
+    wire        [31 : 0]        I_mem_araddr;
+    wire                        I_mem_arvalid;
+    wire        [7 : 0]         I_mem_arlen;
+    wire                        I_mem_arready;
+    wire        [31 : 0]        I_mem_rdata;
+    wire                        I_mem_rvalid;
+    wire                        I_mem_rlast;
+    wire                        I_mem_rready;
     Icache_wrapper #(
     )Icache(
-    
+            .clk                (M_AXI_ACLK),
+            .resetn             (M_AXI_ARESETN),
+
+            .s_araddr           (pc_araddr),
+            .s_arvalid          (pc_arvalid),
+            .s_arready          (pc_arready),
+
+            .s_rdata            (pc_rdata),
+            .s_rvalid           (pc_rvalid),
+            .s_rready           (pc_rready),
+
+            .m_araddr           (I_mem_araddr),
+            .m_arvalid          (I_mem_arvalid),
+            .m_arlen            (I_mem_arlen),
+            .m_arready          (I_mem_arready),
+
+            .m_rdata            (I_mem_rdata),
+            .m_rvalid           (I_mem_rvalid),
+            .m_rlast            (I_mem_rlast),
+            .m_rready           (I_mem_rready)
     );
     
     axi_crossbar_2_1 mem_inst_axi_crossbar(
@@ -323,22 +351,22 @@ module cache_wrapper(
     .aresetn          (    M_AXI_ARESETN   ), // i, 1                 
 
     .s_axi_arid       (    8'd0     ),
-    .s_axi_araddr     (    {pc_araddr, D_mem_araddr}   ),
-    .s_axi_arlen      (    {pc_arlen, 8'd0}),
+    .s_axi_araddr     (    {I_mem_araddr, D_mem_araddr}   ),
+    .s_axi_arlen      (    {I_mem_arlen, 4'd0}),
     .s_axi_arsize     (    {3'd2,3'd2}   ),
     .s_axi_arburst    (    {2'b01,2'b01}  ),
     .s_axi_arlock     (    'd0   ),
     .s_axi_arcache    (    'd0  ),
     .s_axi_arprot     (    'd0   ),
     .s_axi_arqos      (    4'd0            ),
-    .s_axi_arvalid    (    {pc_arvalid, D_mem_arvalid}  ),
-    .s_axi_arready    (    {pc_arready, D_mem_arready}  ),
+    .s_axi_arvalid    (    {I_mem_arvalid, D_mem_arvalid}  ),
+    .s_axi_arready    (    {I_mem_arready, D_mem_arready}  ),
     .s_axi_rid        (          ),
-    .s_axi_rdata      (    {pc_rdata, D_mem_rdata}    ),
+    .s_axi_rdata      (    {I_mem_rdata, D_mem_rdata}    ),
     .s_axi_rresp      (        ),
-    .s_axi_rlast      (    {pc_rlast, D_mem_rlast}    ),
-    .s_axi_rvalid     (    {pc_rvalid, D_mem_rvalid}   ),
-    .s_axi_rready     (    {pc_rready, D_mem_rready}   ),
+    .s_axi_rlast      (    {I_mem_rlast, D_mem_rlast}    ),
+    .s_axi_rvalid     (    {I_mem_rvalid, D_mem_rvalid}   ),
+    .s_axi_rready     (    {I_mem_rready, D_mem_rready}   ),
     .s_axi_awid       (    'd0     ),
     .s_axi_awaddr     (    {32'd0,mem_awaddr}   ),
     .s_axi_awlen      (    'd0     ),
@@ -361,7 +389,7 @@ module cache_wrapper(
 
     .m_axi_arid       ( M_AXI_ARID[0] ),
     .m_axi_araddr     ( M_AXI_ARADDR ),
-    .m_axi_arlen      (  ),
+    .m_axi_arlen      ( M_AXI_ARLEN ),
     .m_axi_arsize     ( M_AXI_ARSIZE ),
     .m_axi_arvalid    ( M_AXI_ARVALID ),
     .m_axi_arready    ( M_AXI_ARREADY ),

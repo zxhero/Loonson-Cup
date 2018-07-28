@@ -60,7 +60,7 @@ module mycpu_top(
 
     output wire [3:0] arid,
     output wire [31:0]      araddr,
-    output  wire    [7:0]   arlen,
+    output  wire    [3:0]   arlen,
     output wire [2:0] arsize,
     output  wire    [1:0]   arburst,
     output  wire    [1:0]   arlock,
@@ -94,7 +94,6 @@ assign  awprot = 'd0;
 assign  wlast = wvalid;
 assign  wid = 'd0;
 
-assign  arlen = 'd0;
 assign  arburst = 2'b01;
 assign  arlock = 'd0;
 assign  arcache = 'd0;
@@ -122,10 +121,7 @@ wire        is_b;
 wire Memread;
 wire    [31:0]  id_pc_4_o;
 /****************** axi_slate *****************/
-cache_wrapper 
-#(
-    .C_M_AXI_DATA_WIDTH     (32)
-)cache_wrapper
+cache_wrapper cache_wrapper
 (
     .M_AXI_ACLK(aclk),
     .M_AXI_ARESETN(aresetn),
@@ -147,6 +143,7 @@ cache_wrapper
     .M_AXI_ARADDR(araddr),
     .M_AXI_ARSIZE(arsize),
     .M_AXI_ARVALID(arvalid),
+    .M_AXI_ARLEN(arlen),
     .M_AXI_ARREADY(arready),
 
     .M_AXI_RID(rid),
@@ -179,7 +176,7 @@ cache_wrapper
     .pc_req                         (inst_sram_rdata[63:32]),
     .Inst_Valid                     (inst_valid),
 
-    .Flush                          (sweap | (weap & (~|(id_pc_4_o ^ if_irom_pc_o))) ),
+    .Flush                          (sweap | (weap & (~|(id_pc_4_o ^ if_irom_pc_o))) | is_int),
 
     .Address                        (MEM_data_pack[67:36]),
     .MemWrite                       (|MEM_data_pack[35:32]),

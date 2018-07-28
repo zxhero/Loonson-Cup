@@ -24,15 +24,39 @@ module IF_stage(
 	input  wire    is_b
 );
 wire    wb_pc_ack;
-reg [31:0] pc, inst,PC_b,wb_pc_hold;
-reg token_hold,pc_w;
+reg [31:0] pc, inst,PC_b,wb_pc_hold,int_pc_reg;
+reg token_hold,pc_w,is_int_reg;
 wire [31:0] pc_i,pc_4;
 wire [31:0] new_pc;
 always @(posedge clk)
 begin
-	pc <= resetn ? (is_int ? new_pc :((PC_valid & PC_ready) ?  new_pc : pc)) : 32'hbfc00000; 
+	pc <= resetn ? ((PC_ready) ?  (is_int_reg ? int_pc_reg : new_pc) : pc) : 32'hbfc00000;//(is_int ? new_pc :((PC_valid & PC_ready) ?  new_pc : pc)) : 32'hbfc00000; 
 	//inst <= resetn ?  irom_inst_i : 32'd0;
 	PC_b <= resetn ?  (is_b ? wb_pc : PC_b) : 32'd0;
+end
+
+always @(posedge clk)
+begin
+        if(~resetn)
+        begin
+                is_int_reg <= 1'b0;
+                int_pc_reg <= 32'd0;
+        end
+        else if(is_int && ~( PC_ready))
+        begin
+                is_int_reg <= 1'b1;
+                int_pc_reg <= int_pc;
+        end
+        else if(is_int_reg &&  PC_ready)
+        begin
+                is_int_reg <= 1'b0;
+                int_pc_reg <= 32'd0;
+        end
+        else
+        begin
+                is_int_reg <= is_int_reg;
+                int_pc_reg <= int_pc_reg;
+        end
 end
 
 always @(posedge clk)
@@ -41,7 +65,7 @@ begin
         PC_valid <= 1'b0;
     else if(~PC_valid )
         PC_valid <= 1'b1;
-    else if(PC_ready)
+    else if(PC_ready && PC_valid)
         PC_valid <= 1'b0;
     else
         PC_valid <= PC_valid;  
