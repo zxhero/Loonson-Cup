@@ -12,7 +12,9 @@ module ID_stage(
     input wire [4:0]	wa1_i,
     input wire [31:0]	wd1_i,
     input wire		RegWrite_i,
-
+    // input from mem//
+    input   wire    stop,
+    
     /*Output to EXE stage*/
     output wire [31:0]	rd1_o,
     output wire [31:0]	rd2_o,
@@ -32,15 +34,13 @@ module ID_stage(
     output wire     token,
     output wire		eret,
     output   wire    weap,
-    /*input from forward unit */
-    input  wire         stop,
     
     /*input to b forward unit*/
     input   wire	div_complete,
     input   wire    [4:0]   ex_db_dest,
-    input   wire            ex_memread,
+    //input   wire            ex_memread,
     input   wire    [4:0]   mem_db_dest,
-    input   wire            memread,
+    //input   wire            memread,
     input   wire    [31:0]  mem_ALUout,
     input   wire    [4:0]   wb_dest,
     input   wire    [31:0]  wb_data,
@@ -63,7 +63,7 @@ reg     pc_valid;
 
 always @(posedge clk)
 begin
-    if(stop | b_stop)
+    if(b_stop || stop)
     begin
             inst <= inst;
             pc  <=  pc;
@@ -168,10 +168,10 @@ ctrl ctrl (
 	.jr_hit		(jr_hit		),
 	.complete	(complete	),
 	.ex_db_dest    (ex_db_dest),
-	.ex_memread    (ex_memread),
+	//.ex_memread    (ex_memread),
     .mem_db_dest    (mem_db_dest),
     .mem_wdata      (mem_ALUout),
-    .memread        (memread),
+    //.memread        (memread),
     .wb_dest        (wb_dest),
     .wb_wdata       (wb_data),
     .b_stop         (b_stop),
@@ -213,7 +213,7 @@ always @(posedge clk)
 begin
         if(~resetn | sweap)
             weap_hold <= 1'b0;
-        else if(((b_hit | j_hit | jr_hit) &~b_stop &~stop) | token)
+        else if(((b_hit | j_hit | jr_hit) &~b_stop) | token)
             weap_hold <= 1'b1;
         else if(~is_delayslot)
             weap_hold <= 1'b0;
@@ -258,7 +258,7 @@ always@(*)
 begin
     if(~resetn | sweap)
             PCWriteCond = 1'b0;
-    else if((b_hit | j_hit | jr_hit) &~b_stop &~stop )
+    else if((b_hit | j_hit | jr_hit) &~b_stop )
             PCWriteCond = 1'b1;
     else
             PCWriteCond = 1'b0;

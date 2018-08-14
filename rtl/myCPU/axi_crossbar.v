@@ -87,7 +87,12 @@ module axi_crossbar(
     reg         channel1_read_state;
     
     wire    [2:0]   state;
+    wire            channel1_address_map;
+    wire            channel0_address_map;
+    wire            wadress_map;
     
+    assign      channel1_address_map = (s_axi_araddr[63:61] == 3'b100) || (s_axi_araddr[63:61] == 3'b101);
+    assign      channel0_address_map = (s_axi_araddr[31:29] == 3'b100) || (s_axi_araddr[31:29] == 3'b101);
     assign      state = {wait_state, channel0_read_state, channel1_read_state};
     //read channel
     assign      s_axi_rdata = {{32{m_axi_rid}} & m_axi_rdata, {32{~m_axi_rid}} & m_axi_rdata};
@@ -97,7 +102,7 @@ module axi_crossbar(
     //read address channel
     assign      m_axi_arsize = s_axi_arsize[2:0];
     assign      m_axi_arid = channel1_read_state;
-    assign      m_axi_araddr = {{32{channel1_read_state}} & s_axi_araddr[63:32]} | {{32{channel0_read_state}} & s_axi_araddr[31:0]};
+    assign      m_axi_araddr = {{32{channel1_read_state}} & {{{3{~channel1_address_map}} & s_axi_araddr[63:61]},s_axi_araddr[60:32]}} | {{32{channel0_read_state}} & {{{3{~channel0_address_map}} & s_axi_araddr[31:29]},s_axi_araddr[28:0]}};
     assign      m_axi_arlen = {{4{channel1_read_state}} & s_axi_arlen[7:4]};
     assign      m_axi_arvalid = channel1_read_state | channel0_read_state;
     assign      s_axi_arready = {channel1_read_state & m_axi_arready, channel0_read_state & m_axi_arready};
@@ -146,8 +151,9 @@ module axi_crossbar(
     assign      m_axi_wvalid = s_axi_wvalid[0];
     assign      s_axi_wready = {1'b0, m_axi_wready};
     //write adress channel
+    assign      wadress_map = (s_axi_awaddr[31:29] == 3'b100) || (s_axi_awaddr[31:29] == 3'b101);
     assign      m_axi_awid = s_axi_awid[3:0];
-    assign      m_axi_awaddr = s_axi_awaddr[31:0];
+    assign      m_axi_awaddr = {{{3{~wadress_map}} & s_axi_awaddr[31:29]},s_axi_awaddr[28:0]};
     assign      m_axi_awsize = s_axi_awsize[2:0];
     assign      m_axi_awvalid = s_axi_awvalid[0];
     assign      s_axi_awready = {1'b0, m_axi_awready};

@@ -69,6 +69,7 @@ module Icache_wrapper
         reg     [31 : 0]                                                addr;
         reg     [31 : 0]                                                rdata;
         reg                                                             rvalid;
+        //wire                                                            rvalid;
         reg     [32 - Line_Size_in_Bits - Index_Num_in_Bits -1 : 0]     way1_tag;
         reg     [31:0]                                                  way1_rdata;
         reg                                                             way1_valid;
@@ -91,6 +92,7 @@ module Icache_wrapper
         assign      offset = addr[1+Line_Size_in_Bits /2 : 2];
         assign      tag = addr[31 : Index_Num_in_Bits + 2 + Line_Size_in_Bits /2];
         assign      s_arready =  wait_stage ;
+        //assign      s_rvalid = (rvalid) | (compare_stage & (hit[0] & way1_valid | hit[1] & way2_valid));
         assign      s_rvalid = (rvalid) | (compare_stage & (hit[0] & way1_valid | hit[1] & way2_valid));
         assign      s_rdata = {{32{rvalid}} & rdata} | {{32{compare_stage & hit[0]}} & way1_rdata} | {{32{compare_stage & hit[1]}} & way2_rdata};
         assign      m_araddr = addr;
@@ -108,7 +110,8 @@ module Icache_wrapper
                 else if(s_arvalid && stage == 6'b100000)
                         wait_stage <= 1'b0;
                 else if((stage == 6'b001000 && (|hit) && s_rready) || (stage == 6'b000001 && m_rlast && m_rvalid && (~rvalid || rvalid && s_rready)) 
-                         || (stage == 6'b000010 && m_rlast && m_rvalid && (~rvalid || rvalid && s_rready)) || (stage == 6'b000000 && rvalid && s_rready))
+   //                      || (stage == 6'b000010 && m_rlast && m_rvalid && (~rvalid || rvalid && s_rready)) || (stage == 6'b000000 && rvalid && s_rready))
+                                || (stage == 6'b000000 && rvalid && s_rready))
                         wait_stage <= 1'b1;
                 else
                         wait_stage <= wait_stage;
@@ -203,7 +206,8 @@ module Icache_wrapper
                 else
                         rvalid <= rvalid;
         end
-
+        //assign  rvalid = waitkeyword_stage & m_rvalid;
+        
         always @(posedge clk)
         begin
                 if(~resetn)

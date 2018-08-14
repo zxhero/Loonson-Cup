@@ -69,7 +69,7 @@ module Dcache_wrapper
         reg    [31:0]   addr;
         
         assign  stage = {wait_stage, lookup_stage, accessmem_stage, waitdata_stage};
-        assign  cacheable = ~(&s_awaddr[31:16]) & s_awvalid & (wptr_valid | (&s_wstrb));
+        assign  cacheable = ~(s_awaddr[31:16] == 16'hbfaf) & s_awvalid & (wptr_valid | (&s_wstrb));
         assign  miss = lookup_stage & (~|tag);
         assign  hit = lookup_stage & (|tag);
         assign  m_arvalid = accessmem_stage;

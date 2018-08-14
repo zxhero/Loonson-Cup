@@ -18,7 +18,6 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
-
 module cache_wrapper(
 // System Signals
   input wire M_AXI_ACLK,
@@ -136,7 +135,8 @@ module cache_wrapper(
     
     assign          Inst_Req_Ack = pc_arvalid & pc_arready | Flush;
     assign          instruction = {(pc_rdata & {32{wait_inst_state}})} ;//| (inst_slot & {32{wait_mem_state}})};
-    assign          Inst_Valid = (pc_rvalid & wait_inst_state & ~Flush) ;//| (pc_rvalid_slot);
+    //assign          Inst_Valid = (pc_rvalid & wait_inst_state & ~Flush) ;//| (pc_rvalid_slot);
+    assign          Inst_Valid = (pc_rvalid & wait_inst_state) ;//| (pc_rvalid_slot);
     
     assign          Mem_Req_Ack = (MemRead & mem_arvalid & mem_arready) | (MemWrite & wdata_fifo_ready & waddr_fifo_ready);
     assign          Read_data = mem_rdata;
@@ -352,7 +352,7 @@ module cache_wrapper(
     
         .s_axi_arid       (    8'd0     ),
         .s_axi_araddr     (    {I_mem_araddr, D_mem_araddr}   ),
-        .s_axi_arlen      (    {I_mem_arlen, 4'd0}),
+        .s_axi_arlen      (    {I_mem_arlen[3:0], 4'd0}),
         .s_axi_arsize     (    {3'd2,3'd2}   ),
         .s_axi_arvalid    (    {I_mem_arvalid, D_mem_arvalid}  ),
         .s_axi_arready    (    {I_mem_arready, D_mem_arready}  ),

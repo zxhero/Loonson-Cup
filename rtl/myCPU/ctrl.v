@@ -23,10 +23,10 @@ module ctrl (
 	/*input to b forward unit*/
 	input wire		complete,
     input   wire    [4:0]   	ex_db_dest,
-    input   wire                ex_memread,
+    //input   wire                ex_memread,
     input   wire    [4:0]   	mem_db_dest,
     input   wire    [31:0]      mem_wdata,
-    input   wire            	memread,
+    //input   wire            	memread,
     input   wire    [4:0]   	wb_dest,
     input   wire    [31:0]      wb_wdata,
     output  reg             	b_stop,
@@ -259,12 +259,12 @@ begin
         begin
                 if((rs == ex_db_dest) && ex_db_dest != 'd0)
                         b_stop = 1'b1;
-                else if((rs == mem_db_dest) && mem_db_dest != 'd0 && memread == 1'b1)
-                        b_stop = 1'b1;
+                /*else if((rs == mem_db_dest) && mem_db_dest != 'd0 && memread == 1'b1)
+                        b_stop = 1'b1;*/
                 else 
                         b_stop = 1'b0;
         end
-        else if(is_b )
+       /* else if(is_b )
         begin
                 if((rs == ex_db_dest) && ex_db_dest != 'd0 && ex_memread == 1'b1)
                          b_stop = 1'b1;
@@ -272,7 +272,7 @@ begin
                         b_stop = 1'b1;
                 else 
                         b_stop = 1'b0;
-        end
+        end*/
 	else if ((is_mfhi | is_mflo | is_mthi | is_mtlo) )
 		b_stop = ~div_valid;
         else
@@ -283,7 +283,8 @@ always @(*)
 begin
         if(is_b == 1'b1 || jr_hit == 1'b1)
         begin
-                if(rs == mem_db_dest && mem_db_dest != 'd0 && memread == 1'b0)
+                //if(rs == mem_db_dest && mem_db_dest != 'd0 && memread == 1'b0)
+                if(rs == mem_db_dest && mem_db_dest != 'd0)
                         forward_rs = 'd1;
                 else if(rs == wb_dest && wb_dest != 'd0)
                         forward_rs = 'd2;
@@ -298,7 +299,8 @@ always @(*)
 begin
         if(is_beq == 1'b1 || is_bne == 1'b1 || jr_hit == 1'b1)
         begin
-                if(rt == mem_db_dest && mem_db_dest != 'd0 && memread == 1'b0)
+                //if(rt == mem_db_dest && mem_db_dest != 'd0 && memread == 1'b0)
+                if(rt == mem_db_dest && mem_db_dest != 'd0 )
                         forward_rt = 'd1;
                 else if(rt == wb_dest && wb_dest != 'd0)
                         forward_rt = 'd2;
@@ -312,24 +314,27 @@ end
 /*for inst buf*/
 reg is_b_exe1_reg;
 wire is_b_exe1;
-reg is_b_m1_reg;
-wire is_b_m1;
+//reg is_b_m1_reg;
+//wire is_b_m1;
 reg is_b_exe2_reg;
 wire is_b_exe2;
-reg is_b_m2_reg;
-wire is_b_m2;
+//reg is_b_m2_reg;
+//wire is_b_m2;
 reg [31:0] rdata1_hold;
 reg [31:0] rdata2_hold;
 reg     is_beq_hold,is_bne_hold,is_bge_hold,is_bgtz_hold,is_blez_hold,is_blt_hold;
 wire    equal_hold, rs_ls_hold, rs_nz_hold;
 
-assign b_hit = (~is_b_exe1&~is_b_m1&~is_b_exe2&~is_b_m2) & (/*rs=rt*/(equal & is_beq) | /*rs!=rt*/(~equal & is_bne) | /*rs>=0*/(~rs_ls & (is_bgez | is_bgezal)) 
+//assign b_hit = (~is_b_exe1&~is_b_m1&~is_b_exe2&~is_b_m2) & (/*rs=rt*/(equal & is_beq) | /*rs!=rt*/(~equal & is_bne) | /*rs>=0*/(~rs_ls & (is_bgez | is_bgezal)) 
+//						| /*rs>0*/(~rs_ls & rs_nz & is_bgtz) | /*rs<=0*/((rs_ls | ~rs_nz) & is_blez) | /*rs<0*/(rs_ls & (is_bltz | is_bltzal)));
+
+assign b_hit = (~is_b_exe1&~is_b_exe2) & (/*rs=rt*/(equal & is_beq) | /*rs!=rt*/(~equal & is_bne) | /*rs>=0*/(~rs_ls & (is_bgez | is_bgezal)) 
 						| /*rs>0*/(~rs_ls & rs_nz & is_bgtz) | /*rs<=0*/((rs_ls | ~rs_nz) & is_blez) | /*rs<0*/(rs_ls & (is_bltz | is_bltzal)));
-						
+												
 assign is_b_exe1 = (rs == ex_db_dest  ) && ex_db_dest != 'd0;
-assign is_b_m1 = (rs == mem_db_dest ) && mem_db_dest != 'd0 && memread == 1'b1;
+//assign is_b_m1 = (rs == mem_db_dest ) && mem_db_dest != 'd0 && memread == 1'b1;
 assign is_b_exe2 = (((is_beq == 1'b1||is_bne == 1'b1) && rt == ex_db_dest)) && ex_db_dest != 'd0;
-assign is_b_m2 = (((is_beq == 1'b1||is_bne == 1'b1) && rt == mem_db_dest)) && mem_db_dest != 'd0 && memread == 1'b1;
+//assign is_b_m2 = (((is_beq == 1'b1||is_bne == 1'b1) && rt == mem_db_dest)) && mem_db_dest != 'd0 && memread == 1'b1;
 always@(posedge clk)
 begin
     if(~resetn || sweap)
@@ -369,7 +374,7 @@ begin
         else
                     is_b_exe2_reg <= 1'b0;
 end
-always @(posedge clk)
+/*always @(posedge clk)
 //always @(rs or rt or ex_db_dest or  mem_db_dest)
 begin
         if(is_b)
@@ -395,7 +400,7 @@ begin
         end
         else
                     is_b_m2_reg <= 1'b0;
-end
+end*/
 always @(posedge clk)
 begin
     if(~resetn || b_stop || sweap)
@@ -409,12 +414,18 @@ begin
     end
     else if(is_b)
     begin
-            is_beq_hold <= (is_b_exe1|is_b_exe2|is_b_m2|is_b_m1)&is_beq;
+           /* is_beq_hold <= (is_b_exe1|is_b_exe2|is_b_m2|is_b_m1)&is_beq;
             is_bne_hold <= (is_b_exe1|is_b_exe2|is_b_m2|is_b_m1)&is_bne;
             is_bge_hold <= (is_b_m1|is_b_exe1)&(is_bgez | is_bgezal);
             is_bgtz_hold <= (is_b_m1|is_b_exe1)&is_bgtz;
             is_blez_hold <= (is_b_m1|is_b_exe1)&is_blez;
-            is_blt_hold <= (is_b_m1|is_b_exe1)&(is_bltz | is_bltzal);
+            is_blt_hold <= (is_b_m1|is_b_exe1)&(is_bltz | is_bltzal);*/
+            is_beq_hold <= (is_b_exe1|is_b_exe2)&is_beq;
+            is_bne_hold <= (is_b_exe1|is_b_exe2)&is_bne;
+            is_bge_hold <= (is_b_exe1)&(is_bgez | is_bgezal);
+            is_bgtz_hold <= (is_b_exe1)&is_bgtz;
+            is_blez_hold <= (is_b_exe1)&is_blez;
+            is_blt_hold <= (is_b_exe1)&(is_bltz | is_bltzal);
     end
     else
     begin
@@ -427,9 +438,13 @@ begin
     end
 end
 
-assign equal_hold = is_b_exe1_reg ? (is_b_m2_reg ? (mem_wdata == wb_wdata):(mem_wdata == rdata2_hold)) : (is_b_exe2_reg ? (is_b_m1_reg ? (wb_wdata == mem_wdata):(rdata1_hold == mem_wdata)) : (is_b_m1_reg ? (wb_wdata == rdata2_hold) : (is_b_m2_reg ? (rdata1_hold == wb_wdata) : 1'b0)));
+/*assign equal_hold = is_b_exe1_reg ? (is_b_m2_reg ? (mem_wdata == wb_wdata):(mem_wdata == rdata2_hold)) : (is_b_exe2_reg ? (is_b_m1_reg ? (wb_wdata == mem_wdata):(rdata1_hold == mem_wdata)) : (is_b_m1_reg ? (wb_wdata == rdata2_hold) : (is_b_m2_reg ? (rdata1_hold == wb_wdata) : 1'b0)));
 assign  rs_ls_hold = is_b_exe1_reg ? mem_wdata[31] : (is_b_m1_reg ? wb_wdata[31] : 1'b0);
-assign  rs_nz_hold = is_b_exe1_reg ? |mem_wdata : (is_b_m1_reg ? |wb_wdata : 1'b0);
+assign  rs_nz_hold = is_b_exe1_reg ? |mem_wdata : (is_b_m1_reg ? |wb_wdata : 1'b0);*/
+assign equal_hold = is_b_exe1_reg ? ((mem_wdata == rdata2_hold)) 
+                    : (is_b_exe2_reg ? ((rdata1_hold == mem_wdata)) : 1'b0);
+assign  rs_ls_hold = is_b_exe1_reg ? mem_wdata[31] : (1'b0);
+assign  rs_nz_hold = is_b_exe1_reg ? |mem_wdata : (1'b0);
 assign token =  (/*rs=rt*/(equal_hold & is_beq_hold) | /*rs!=rt*/(~equal_hold & is_bne_hold) | /*rs>=0*/(~rs_ls_hold & is_bge_hold) 
 						| /*rs>0*/(~rs_ls_hold & rs_nz_hold & is_bgtz_hold) | /*rs<=0*/((rs_ls_hold | ~rs_nz_hold) & is_blez_hold) | /*rs<0*/(rs_ls_hold & is_blt_hold));
 endmodule

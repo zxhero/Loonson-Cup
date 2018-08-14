@@ -26,6 +26,7 @@ module IF_stage(
 wire    wb_pc_ack;
 reg [31:0] pc, inst,PC_b,wb_pc_hold,int_pc_reg;
 reg token_hold,pc_w,is_int_reg;
+reg     stop_state;
 wire [31:0] pc_i,pc_4;
 wire [31:0] new_pc;
 always @(posedge clk)
@@ -128,9 +129,20 @@ mux4 #(32) mux_pc (
 assign new_pc = is_int ? int_pc : ((token|token_hold) ? PC_b : pc_i);
 assign irom_pc_o = resetn ?  pc: 32'hbfc00000;
 // can not use reg pc here because of the latency of i-rom
+/*
+always @(posedge clk)
+begin
+        if(~resetn)
+                stop_state <= 1'b0;
+        else if(stop)
+                stop_state <= 1'b1;
+        else
+                stop_state <= 1'b0;
+end
+*/
 assign pc_o = (inst_valid & inst_ready & ~is_int) ? irom_pc_i : 32'd0;
 assign inst_o = (inst_valid & inst_ready & ~is_int) ? irom_inst_i : 32'h00000000;
-assign  inst_ready = ~stop;
+assign  inst_ready = ~(stop);
 assign  wb_pc_ack = (PC_valid & PC_ready);
 endmodule
 

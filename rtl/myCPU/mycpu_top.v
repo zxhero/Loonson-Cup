@@ -151,23 +151,7 @@ cache_wrapper cache_wrapper
     .M_AXI_RVALID(rvalid),
     .M_AXI_RREADY(rready),
     .M_AXI_RLAST(rlast),
-    /*.PC(if_irom_pc_o),
-    .PC_valid(PC_valid),
-    .ins_ready(inst_ready),
-    .PC_ready(PC_ready),
-    .ins_back_pack(inst_sram_rdata),
-    .ins_valid(inst_valid),
 
-    .weap(sweap | weap),
-    .token_i(sweap |  id_wb_PCWC_o | token),
-    .j_b(id_wb_PCWC_o | is_b),
-    .is_int(is_int),
-
-    .MEM_data_pack(MEM_data_pack),
-    .MEM_data_valid(MEM_data_valid),
-    .MEM_data_ready(MEM_data_ready),
-    .MEM_rdata(data_sram_rdata),
-    .MEM_rvalid(MEM_rvalid)*/
     .PC                             (if_irom_pc_o),
     .Inst_Req_Valid                 (PC_valid),
     .Inst_Req_Ack                   (PC_ready),  
@@ -176,7 +160,7 @@ cache_wrapper cache_wrapper
     .pc_req                         (inst_sram_rdata[63:32]),
     .Inst_Valid                     (inst_valid),
 
-    .Flush                          (sweap | (weap & (~|(id_pc_4_o ^ if_irom_pc_o))) | is_int),
+    .Flush                          (sweap | /*(weap & (|(id_pc_4_o ^ if_irom_pc_o))) |*/ is_int),
 
     .Address                        (MEM_data_pack[67:36]),
     .MemWrite                       (|MEM_data_pack[35:32]),
@@ -228,7 +212,8 @@ IF_stage IF_stage (
 	.inst_o		(if_inst_o	),
 	.wb_pc		(id_wb_pc_o	),
 	.PCWriteCond	(id_wb_PCWC_o	),
-	.stop          (stop|b_stop|mem_stop),
+	//.stop          (stop|b_stop|mem_stop),
+	.stop          (b_stop|mem_stop),
 	.token         (token),
 	.is_int		(is_int),
 	.int_pc		(int_pc),
@@ -261,6 +246,7 @@ wire    [6:0] id_tag;
 wire   [31:0] id_badvaddr_i;
 wire [4:0]  db_dest;
 wire [4:0]  wb_dest_i;
+wire        mem_db_en;
 ID_stage ID_stage (
     .clk            (aclk),
     .resetn         (aresetn),
@@ -290,14 +276,21 @@ ID_stage ID_stage (
     .new_pc         (id_wb_pc_o    ),
     .PCWriteCond    (id_wb_PCWC_o    ),
     .eret		(is_eret),
-    .stop           (stop|mem_stop),
+    //.stop           (mem_stop),
     /*input to b forward unit*/
     .div_complete		(div_complete),
     .ex_db_dest         ({5{ex_wb_ctrl_o[0]}} & db_dest),
-    .ex_memread         (|ex_mem_ctrl_o[9:5]),
-    .mem_db_dest        ({5{mem_wb_ctrl_o[0]}} & wb_dest_i),
-    .memread            (Memread),
+   // .ex_db_en           (),
+    //.ex_memread         (|ex_mem_ctrl_o[9:5]),
+    .mem_db_dest        ({5{mem_db_en}} & wb_dest_i),
+   // .mem_db_en          (),
+    //.memread            (Memread),
     .mem_ALUout         (ALU_final),
+    //.ex_db_dest         ('d0),
+    //.ex_memread         ('d0),
+    //.mem_db_dest        ('d0),
+    //.memread            ('d0),
+    //.mem_ALUout         ('d0),
     .wb_dest            ({5{wb_RegWrite_o}} & wb_wa1_o),
     .wb_data            (reg_wdata),
     .id_tag_in          (if_tag),
@@ -316,8 +309,8 @@ wire [16:0] 	ex_mem_ctrl_o;
 wire [31:0]	ex_ALUOut_o;
 wire [1:0]	mul_con_o;
 wire [1:0]	div_con_o;
-wire [1:0] ALUSrcB;
-wire        ALUSrcA;
+//wire [1:0] ALUSrcB;
+//wire        ALUSrcA;
 wire    [6:0] ex_tag;
 wire    [31:0]  exe_badvaddr_i;
 wire    [31:0]  exe_badvaddr_d;
@@ -348,12 +341,12 @@ EX_stage EX_stage (
 	.div_con_o	(div_con_o),
 	
 	.ALUout_i(ALU_final),
+	.mem_db_dest({5{mem_db_en}} & wb_dest_i),
      .wb_i(reg_wdata),
-     .ALUSrcB(ALUSrcB),
-     .ALUSrcA(ALUSrcA),
-     .stop(stop|mem_stop),
-     .ForwardA(ForwardA),
-     .ForwardB(ForwardB),
+     .wb_dest({5{wb_RegWrite_o}} & wb_wa1_o),
+     //.ALUSrcB(ALUSrcB),
+     //.ALUSrcA(ALUSrcA),
+     //.stop(stop|mem_stop),
      .exe_tag_o(ex_tag),
      .exe_tag_i(id_tag),
      .exe_badvaddr_i_i(id_badvaddr_i),
@@ -441,7 +434,9 @@ MEM_stage MEM_stage (
 	.ALUOut_o	(mem_ALUOut_o	),
 	.db_dest_o   (wb_dest_i),
 	.mem_stop     (mem_stop),
-	.rd2_o     (mem_rd2)
+	.rd2_o     (mem_rd2),
+	
+	.mem_db_en (mem_db_en)
 );
 assign data_sram_addr = {{32{~(mem_tag[1]|mem_tag[0])}}&mem_ALUOut_o};	// for latency of sram
 /**************** end *******************/
@@ -461,7 +456,7 @@ WB_stage WB_stage (
 	.rdata_i	(mem_rdata_o	),	// ReadData from Mem
 	.ALUOut_i	(ALU_final	),	// Result of ALU
 	.pc_o		(wb_pc_o	),
-	.inst_o		(wb_inst_o	),
+	//.inst_o		(wb_inst_o	),
 
 	.db_dest_i  	(wb_dest_i	),
 
@@ -475,22 +470,6 @@ assign debug_wb_rf_wen = {4{wb_RegWrite_o}};
 assign debug_wb_rf_wnum = wb_wa1_o;
 assign debug_wb_rf_wdata = reg_wdata;
 
-/*************** data forward unit ***************/
-forward_unit forward_unit(
-    .clk(aclk),
-    .rst(aresetn ),
-    .Asource({5{~ALUSrcA}}&ex_inst_o[25:21]),
-    .Bsource(ex_inst_o[20:16]),
-    .mem_dest({5{mem_wb_ctrl_o[0]}} & wb_dest_i),
-    .mem_load(Memread),
-    .wb_dest({5{wb_RegWrite_o}} & wb_wa1_o),
-    
-    .ForwardA(ForwardA),
-    .ForwardB(ForwardB),
-    .stop(stop)
-);
-/**************** end *******************/
-
 /*************** muti&div unit ***************/
 
 wire	[63:0]	mul_result;
@@ -500,7 +479,7 @@ wire    enable;
 multi multi(
 	.clk(aclk),
 	.resetn(aresetn ),
-	.sig(mul_con_o[1]& ~sweap),
+	.sig(mul_con_o[1]),
 	.en(mul_con_o[0]& ~sweap),
 	.S1(ex_rd1_o),
 	.S2(ex_rd2_o),
@@ -520,6 +499,19 @@ divider divider (
 	.r		(div_r		),
 	.complete	(div_complete	)
 );
+
+/*divider32 divider32(
+	    .aclk          (aclk),
+        .aresetn       (aresetn),
+        .div_en         (div_con_o[0] & ~sweap),
+        .div_signed     (div_con_o[1] & ~sweap),
+        .flush          (1'b0),
+        .devidend       (ex_rd1_o),    //devidend
+        .devisor        (ex_rd2_o),    //devisor
+        .quotient       (div_s),    //quotient
+        .reminder       (div_r),    //reminder
+        .complete       (div_complete)
+);*/
 
 always @(posedge aclk)
 begin

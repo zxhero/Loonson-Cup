@@ -35,7 +35,10 @@ module MEM_stage (
 	output wire [31:0]	ALUOut_o,		//reg write data
 	output wire [4:0] 	db_dest_o,
 	output reg mem_stop,
-	output reg     [31:0]  rd2_o
+	output reg     [31:0]  rd2_o,
+	
+	//mem to id
+	output wire        mem_db_en
 );
 
 reg [31:0] pc, inst, wdata, ALUOut;
@@ -150,9 +153,11 @@ assign  mem_tag_o = tag;
 //assign MemRead_o = mem_ctrl[1];
 //assign MemWrite_o = mem_ctrl_i[0];
 assign wb_ctrl_o = mem_stop ? 'd0 : wb_ctrl;
+assign  mem_db_en = wb_ctrl[0];
 //assign rdata_o = rdata_i;
 assign ALUOut_o = ALUOut;
-assign db_dest_o = mem_stop ? 'd0 : db_dest;
+//assign db_dest_o = mem_stop ? 'd0 : db_dest;
+assign db_dest_o = db_dest;
 
 assign {unsign,r4,lwl,lwr,r2,r1} = mem_ctrl[10:5];
 assign {w4, swl,swr, w2, w1} = mem_ctrl[4:0];

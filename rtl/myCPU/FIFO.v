@@ -76,7 +76,11 @@ module FIFO
     always @(posedge clk)
     begin
             if(~is_full && valid)
-                    queue[write_ptr] <= wdata_pack;
+            begin
+                    for(i = 0; i < QUEUE_LENGTH; i = i+1)
+                    begin      queue[i] <= (i == write_ptr) ? wdata_pack : queue[i];    end
+                   // queue[write_ptr] <= wdata_pack;
+            end
             else
             begin
                     for(i = 0; i < QUEUE_LENGTH; i = i+1)

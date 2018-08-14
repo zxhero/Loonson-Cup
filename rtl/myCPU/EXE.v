@@ -23,19 +23,16 @@ module EX_stage(
 	/*Output to MEM stage*/
 	output wire [31:0]	ALUOut,
 	input  wire [31:0] ALUout_i,
-	
+	input  wire [4:0]  mem_db_dest,
 	/*Output to mul&div*/
 	output	wire [1:0]	mul_con_o,
 	output wire [1:0]	div_con_o,
 	/*input from WB stage*/
 	input  wire [31:0] wb_i,
-	
+	input  wire    [4:0]   wb_dest,
 	/*input from forward unit*/
 	output wire [1:0]  ALUSrcB,
 	output wire        ALUSrcA,
-	input  wire        stop,
-	input  wire [1:0]  ForwardA,
-	input  wire [1:0]  ForwardB,
 	
 	input  wire    [6:0]   exe_tag_i,
 	output wire    [6:0]   exe_tag_o,
@@ -50,9 +47,6 @@ reg [9:0]	wb_ctrl;
 reg [31:0]	pc, inst;
 reg [31:0]	rd1, rd2;
 reg [31:0]	extend;
-reg [31:0] wb_hold_reg;
-reg         rdata1_hold;
-reg         rdata2_hold;
 reg [31:0]  exe_badvaddr_i;
 
 wire    is_ades;
@@ -64,6 +58,18 @@ assign  is_ades = (mem_ctrl[16]&(ALUOut[0]|ALUOut[1])) | (mem_ctrl[15]&ALUOut[0]
 assign  exe_tag_o = {tag[6],tag[5:3],is_Ov & tag[3],is_adel,is_ades} ;
 assign  exe_badvaddr_d_o = {{32{is_adel | is_ades}} & ALUOut};
 assign  exe_badvaddr_i_o = exe_badvaddr_i;
+
+//forward unit
+wire    [4:0]   rs;
+wire    [4:0]   rt;
+wire    [1:0]        ForwardB;
+wire    [1:0]        ForwardA;
+assign      rs = inst[25:21];
+assign      rt = inst[20:16];
+assign      ForwardB = {((rt == mem_db_dest) & (mem_db_dest != 'd0)), ((rt == wb_dest) & (wb_dest != 'd0))};
+assign      ForwardA = {((rs == mem_db_dest) & (mem_db_dest != 'd0)), ((rs == wb_dest) & (wb_dest != 'd0))};
+//end
+
 always @(posedge clk)
 begin
         if(~resetn)
@@ -80,31 +86,6 @@ end
 
 always @(posedge clk)
 begin
-        if(ForwardA == 'd2 && stop == 1'b1)
-                wb_hold_reg <= wb_i;
-        else if(ForwardB == 'd2 && stop == 1'b1)
-                wb_hold_reg <= wb_i;
-        else
-                wb_hold_reg <= 'd0;
-end
-
-always @(posedge clk)
-begin
-        if(ForwardA == 'd2 && stop == 1'b1)
-                rdata1_hold <= 1'b1;
-        else
-                rdata1_hold <= 1'b0;
-end
-
-always @(posedge clk)
-begin
-        if(ForwardB == 'd2 && stop == 1'b1)
-                rdata2_hold <= 1'b1;
-        else
-                rdata2_hold <= 1'b0;
-end
-always @(posedge clk)
-begin
     if(~resetn)
     begin
                 exe_ctrl <= 'd0;
@@ -115,17 +96,6 @@ begin
                 rd2 <= 'd0;
                 inst <= 'd0;
                 extend <= 'd0;
-    end
-    else if(stop == 1'b1)
-    begin
-            exe_ctrl <= exe_ctrl;
-            mem_ctrl <= mem_ctrl;
-            wb_ctrl <= wb_ctrl;
-            pc <= pc;
-            rd1 <= rd1;
-            rd2 <= rd2;
-            inst <= inst;
-            extend <= extend;
     end
     else
     begin
@@ -139,17 +109,17 @@ begin
 	       extend <= extend_i;
 	end
 end
-assign	mul_con_o = stop ? 'd0 : exe_ctrl[10:9];
-assign	div_con_o = stop ? 'd0 : exe_ctrl[12:11];
-assign	wb_ctrl_o = stop ? 'd0 : wb_ctrl;
+assign	mul_con_o = exe_ctrl[10:9];
+assign	div_con_o = exe_ctrl[12:11];
+assign	wb_ctrl_o = wb_ctrl;
 assign	pc_o = pc;
-assign	rd2_o = rdata2_hold ? wb_hold_reg : (ForwardB == 'd0 ? rd2 : (ForwardB == 'd1 ? ALUout_i : wb_i));
-assign	rd1_o = rdata1_hold ? wb_hold_reg : (ForwardA == 'd0 ? rd1 : (ForwardA == 'd1 ? ALUout_i : wb_i));
+assign	rd2_o = ForwardB[1] ? ALUout_i : (ForwardB[0] ? wb_i : rd2);//(ForwardB == 'd0 ? rd2 : (ForwardB == 'd1 ? ALUout_i : wb_i));
+assign	rd1_o = ForwardA[1] ? ALUout_i : (ForwardA[0] ? wb_i : rd1);//(ForwardA == 'd0 ? rd1 : (ForwardA == 'd1 ? ALUout_i : wb_i));
 assign inst_o = inst;
 
 wire [1:0] byte_sel;
 assign byte_sel = ALUOut[1:0];
-assign mem_ctrl_o = stop ? 'd0 : {byte_sel, mem_ctrl[14:0]};
+assign mem_ctrl_o = {byte_sel, mem_ctrl[14:0]};
 
 wire [31:0] A, B;
 wire [5:0] ALUop;

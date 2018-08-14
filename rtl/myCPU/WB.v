@@ -9,7 +9,7 @@ module WB_stage (
 	input wire [31:0]	rdata_i,	//MemRdata
 	input wire [31:0]	ALUOut_i,	//ALUOut
 	output wire [31:0]	pc_o,
-	output wire [31:0]	inst_o,
+	//output wire [31:0]	inst_o,
 	input  wire [4:0]   	db_dest_i,
 
 	/*to RF(ID stage)*/
@@ -49,7 +49,7 @@ begin
 end
 
 assign pc_o = pc;
-assign inst_o = inst;
+//assign inst_o = inst;
 assign rdata_o = rdata;
 assign ALUOut_o = ALUOut;
 assign RegWrite_o = RegWrite;
