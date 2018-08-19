@@ -18,9 +18,12 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
-//basic configuration : two ways, line size is 16KB or 32KB, total size is 1024KB, three pipline.
+//basic configuration : two ways, line size is 16B or 32B, total size is 64KB, three pipline.
 //31----------------9|  8----4 |  32    |10
 //       tag         |  index  | offset |
+//-----------------------------------------
+//31----------------15|  14---4    |  32    |10
+//       tag       |  index  | offset |
 //-----------------------------------------
 //optimal : multiple banks and critical word first (maybe stream buffer)
 
@@ -28,7 +31,7 @@ module Icache_wrapper
 #(
         parameter   integer Line_Size = 16,
         parameter   integer Line_Size_in_Bits = $clog2(Line_Size),
-        parameter   integer Index_Num = 512 / Line_Size,
+        parameter   integer Index_Num = 32*1024 / Line_Size,//32*1024 / Line_Size,
         parameter   integer Index_Num_in_Bits = $clog2(Index_Num)
 )(
         input   wire            clk,
@@ -59,7 +62,8 @@ module Icache_wrapper
         wire    [Line_Size_in_Bits /2 - 1 : 0]  offset;
         wire    [32 - Line_Size_in_Bits - Index_Num_in_Bits -1 : 0]     tag;
         wire    [1 : 0]                         bank_replaced;
-        
+        //wire	[3:0]								high_adress;
+		
         reg         wait_stage;
         reg         accesstag_stage;
         reg         compare_stage;
@@ -79,22 +83,26 @@ module Icache_wrapper
         reg     [1 :0]                                                  bank_replaced_reg;
         reg     [1 : 0]                                                 used_record;
         reg     [Line_Size_in_Bits /2 : 0]                          rindex;
-        reg     [Line_Size * 8 - 1: 0]                                bank1   [512 / Line_Size - 1:0];
-        reg     [32 - Line_Size_in_Bits - Index_Num_in_Bits -1 : 0]   tag1    [512 / Line_Size - 1:0];
-        reg     [Line_Size / 4 - 1 : 0]                               valid_array1  [512 / Line_Size - 1:0];
-        reg     [Line_Size * 8 - 1: 0]                                bank2   [512 / Line_Size - 1:0];
-        reg     [32 - Line_Size_in_Bits - Index_Num_in_Bits -1 : 0]   tag2    [512 / Line_Size - 1:0];
-        reg     [Line_Size / 4 - 1 : 0]                               valid_array2  [512 / Line_Size - 1:0];
-        reg     [1 : 0]                                               used_record_array     [512 / Line_Size - 1:0];
+        (* ram_style = "block" *) reg     [Line_Size * 8 - 1: 0]                                bank1   [32*1024  / Line_Size - 1:0];
+        (* ram_style = "block" *) reg     [32 - Line_Size_in_Bits - Index_Num_in_Bits -1 : 0]   tag1    [32*1024 / Line_Size - 1:0];
+        (* ram_style = "block" *) reg     [(Line_Size / 4) * (32*1024 / Line_Size) - 1 : 0]                               valid_array1  ;//[32*1024 / Line_Size - 1:0];
+        (* ram_style = "block" *) reg     [Line_Size * 8 - 1: 0]                                bank2   [32*1024 / Line_Size - 1:0];
+        (* ram_style = "block" *) reg     [32 - Line_Size_in_Bits - Index_Num_in_Bits -1 : 0]   tag2    [32*1024 / Line_Size - 1:0];
+        (* ram_style = "block" *) reg     [(Line_Size / 4) * (32*1024 / Line_Size) - 1 : 0]                               valid_array2  ;//[32*1024 / Line_Size - 1:0];
+
+        (* ram_style = "block" *) reg     [2*(32*1024 / Line_Size) - 1 : 0]                                               used_record_array     ;//[32*1024 / Line_Size - 1:0];
   
         assign      stage = {wait_stage, accesstag_stage, compare_stage, accessmem_stage, waitkeyword_stage,waitdata_stage};
         assign      index = addr[Index_Num_in_Bits + 2 + Line_Size_in_Bits /2 -1 : 2 + Line_Size_in_Bits /2];
         assign      offset = addr[1+Line_Size_in_Bits /2 : 2];
         assign      tag = addr[31 : Index_Num_in_Bits + 2 + Line_Size_in_Bits /2];
+		//assign		high_adressn = 
         assign      s_arready =  wait_stage ;
         //assign      s_rvalid = (rvalid) | (compare_stage & (hit[0] & way1_valid | hit[1] & way2_valid));
         assign      s_rvalid = (rvalid) | (compare_stage & (hit[0] & way1_valid | hit[1] & way2_valid));
-        assign      s_rdata = {{32{rvalid}} & rdata} | {{32{compare_stage & hit[0]}} & way1_rdata} | {{32{compare_stage & hit[1]}} & way2_rdata};
+        assign      s_rdata = {{32{rvalid}} & rdata} | {{32{compare_stage & hit[0]}} & way1_rdata} | {{32{compare_stage & hit[1]}} & way2_rdata};/*rvalid ? rdata : 
+                              (compare_stage & hit[0] ? way1_rdata :
+                              (compare_stage & hit[1] ? way2_rdata : 32'd0));*///
         assign      m_araddr = addr;
         assign      m_arvalid = accessmem_stage;
         assign      m_arlen = Line_Size / 4 - offset - 'd1;
@@ -236,10 +244,14 @@ module Icache_wrapper
                 if(~resetn)
                         way1_valid <= 1'b0;
                 else if(accesstag_stage)
-                        way1_valid <= offset == 2'b00 ? valid_array1[index][0]
+                       /* way1_valid <= offset == 2'b00 ? valid_array1[index][0]
                                                         : (offset == 2'b01 ? valid_array1[index][1]
                                                         : (offset == 2'b10 ? valid_array1[index][2]
-                                                        : valid_array1[index][3]));
+                                                        : valid_array1[index][3]));*/
+                          way1_valid <= offset == 2'b00 ? valid_array1[index*(Line_Size / 4)]
+                                                        : (offset == 2'b01 ? valid_array1[index*(Line_Size / 4) + 1]
+                                                        : (offset == 2'b10 ? valid_array1[index*(Line_Size / 4) + 2]
+                                                        : valid_array1[index*(Line_Size / 4) + 3]));
                 else if(compare_stage && hit[0] && way1_valid && s_rready)
                         way1_valid <= 1'b0;
                 else
@@ -274,10 +286,14 @@ module Icache_wrapper
                 if(~resetn)
                         way2_valid <= 1'b0;
                 else if(accesstag_stage)
-                        way2_valid <= offset == 2'b00 ? valid_array2[index][0]
+                       /* way2_valid <= offset == 2'b00 ? valid_array2[index][0]
                                                         : (offset == 2'b01 ? valid_array2[index][1]
                                                         : (offset == 2'b10 ? valid_array2[index][2]
-                                                        : valid_array2[index][3]));
+                                                        : valid_array2[index][3]));*/
+                        way2_valid <= offset == 2'b00 ? valid_array2[index*(Line_Size / 4)]
+                                                        : (offset == 2'b01 ? valid_array2[index*(Line_Size / 4) + 1]
+                                                        : (offset == 2'b10 ? valid_array2[index*(Line_Size / 4) + 2]
+                                                        : valid_array2[index*(Line_Size / 4) + 3]));
                 else if(compare_stage && hit[0] && way2_valid && s_rready)
                         way2_valid <= 1'b0;
                 else
@@ -299,214 +315,250 @@ module Icache_wrapper
         integer i;
         always @(posedge clk)
         begin
-                if(~resetn)
+               /* if(~resetn)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 bank1[i] <= 'd0;
                         end
-                end
-                else if(m_rvalid && m_rready && bank_replaced_reg[0])
+                end*/
+                if(m_rvalid && m_rready && bank_replaced_reg[0])
                 begin
-                        for(i = 0;i < 512 / Line_Size; i = i+1)
+                        //for(i = 0;i < Index_Num; i = i+1)
                         begin
-                                bank1[i] <= (i == index) ? (rindex == 'd0 ? {bank1[i][127:32],m_rdata}
-                                                           :(rindex == 'd1 ? {bank1[i][127:64],m_rdata,bank1[i][31:0]}
-                                                           :(rindex == 'd2 ? {bank1[i][127:96],m_rdata,bank1[i][63:0]}
-                                                           :{m_rdata,bank1[i][95:0]})))
-                                            :   bank1[i];
+                               // bank1[i] <= (i == index) ? (rindex == 'd0 ? {bank1[i][127:32],m_rdata}
+                               bank1[index] <=  (rindex == 'd0 ? {bank1[index][127:32],m_rdata}
+                                                           :(rindex == 'd1 ? {bank1[index][127:64],m_rdata,bank1[index][31:0]}
+                                                           :(rindex == 'd2 ? {bank1[index][127:96],m_rdata,bank1[index][63:0]}
+                                                           :{m_rdata,bank1[index][95:0]})));
+                                        
                         end
                 end
-                else
+                /*else
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 bank1[i] <= bank1[i];
                         end
-                end
+                end*/
         end
         
         always @(posedge clk)
         begin
-                if(~resetn)
+               /* if(~resetn)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 tag1[i] <= 'd0;
                         end
                 end
-                else if(accessmem_stage && m_arready && bank_replaced_reg[0])
+                else */if(accessmem_stage && m_arready && bank_replaced_reg[0])
                 begin
-                         for(i = 0; i<512 / Line_Size;i = i+1)
+                         //for(i = 0; i<Index_Num;i = i+1)
                         begin
-                                tag1[i] <= i == index ? tag : tag1[i];
+                                //tag1[i] <= i == index ? tag : tag1[i];
+                                tag1[index] <= tag;
                         end
                 end
-                else
+               /* else
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 tag1[i] <= tag1[i];
                         end
-                end
+                end*/
         end
         
         always @(posedge clk)
         begin
                 if(~resetn)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        /*for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 valid_array1[i] <= 'd0;
-                        end
+                        end*/
+                        valid_array1 <= 'd0;
                 end
                 else if(accessmem_stage && m_arready && bank_replaced_reg[0])
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        /*for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 valid_array1[i] <= i == index ? 'd0 : valid_array1[i];
-                        end
+                        end*/
+                        valid_array1[index*(Line_Size / 4) + 3] <= 1'b0;
+                        valid_array1[index*(Line_Size / 4) + 2] <= 1'b0;
+                        valid_array1[index*(Line_Size / 4) + 1] <= 1'b0;
+                        valid_array1[index*(Line_Size / 4) ] <= 1'b0;
                 end
                 else if(m_rvalid && m_rready && bank_replaced_reg[0])
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        /*for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 valid_array1[i] <= i == index ? (rindex == 'd0 ? {valid_array1[i][3:1],1'b1}
                                                                 :(rindex == 'd1 ? {valid_array1[i][3:2],1'b1,valid_array1[i][0]}
                                                                 :(rindex == 'd2 ? {valid_array1[i][3],1'b1,valid_array1[i][1:0]}
                                                                 :{1'b1,valid_array1[i][2:0]}))) 
                                                    : valid_array1[i];
-                        end 
+                        end */
+                        if(rindex == 'd3)
+                                valid_array1[index*(Line_Size / 4) + 3] <= 1'b1;
+                        else if(rindex == 'd2)
+                                valid_array1[index*(Line_Size / 4) + 2] <= 1'b1;
+                        else if(rindex == 'd1)
+                                valid_array1[index*(Line_Size / 4) + 1] <= 1'b1;
+                        else if(rindex == 'd0)
+                                valid_array1[index*(Line_Size / 4) ] <= 1'b1;
                 end
-                else
+                /*else
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 valid_array1[i] <= valid_array1[i];
                         end
-                end
+                end*/
         end
         
         always @(posedge clk)
         begin
-                if(~resetn)
+                /*if(~resetn)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 bank2[i] <= 'd0;
                         end
                 end
-                else if(m_rvalid && m_rready && bank_replaced_reg[1])
+                else */
+                if(m_rvalid && m_rready && bank_replaced_reg[1])
                 begin
-                        for(i = 0;i < 512 / Line_Size; i = i+1)
+                        //for(i = 0;i < Index_Num; i = i+1)
                         begin
-                                bank2[i] <= (i == index) ? (rindex == 'd0 ? {bank2[i][127:32],m_rdata}
-                                                           :(rindex == 'd1 ? {bank2[i][127:64],m_rdata,bank2[i][31:0]}
-                                                           :(rindex == 'd2 ? {bank2[i][127:96],m_rdata,bank2[i][63:0]}
-                                                           :{m_rdata,bank2[i][95:0]})))
-                                            :   bank2[i];
+                                //bank2[i] <= (i == index) ? (rindex == 'd0 ? {bank2[i][127:32],m_rdata}
+                                bank2[index] <= (rindex == 'd0 ? {bank2[index][127:32],m_rdata}
+                                                           :(rindex == 'd1 ? {bank2[index][127:64],m_rdata,bank2[index][31:0]}
+                                                           :(rindex == 'd2 ? {bank2[index][127:96],m_rdata,bank2[index][63:0]}
+                                                           :{m_rdata,bank2[index][95:0]})));
+                                           // :   bank2[i];
                         end
                 end
-                else
+                /*else
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 bank2[i] <= bank2[i];
                         end
-                end
+                end*/
         end
         
         always @(posedge clk)
         begin
-                if(~resetn)
+                /*if(~resetn)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 tag2[i] <= 'd0;
                         end
                 end
-                else if(accessmem_stage && m_arready && bank_replaced_reg[1])
+                else */if(accessmem_stage && m_arready && bank_replaced_reg[1])
                 begin
-                         for(i = 0; i<512 / Line_Size;i = i+1)
+                         //for(i = 0; i<Index_Num;i = i+1)
                         begin
-                                tag2[i] <= i == index ? tag : tag2[i];
+                                //tag2[i] <= i == index ? tag : tag2[i];
+                                tag2[index] <= tag ;
                         end
                 end
-                else
+                /*else
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 tag2[i] <= tag2[i];
                         end
-                end
+                end*/
         end
         
         always @(posedge clk)
         begin
                 if(~resetn)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        /*for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 valid_array2[i] <= 'd0;
-                        end
+                        end*/
+                        valid_array2 <= 'd0;
                 end
                 else if(accessmem_stage && m_arready && bank_replaced_reg[1])
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        /*for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 valid_array2[i] <= i == index ? 'd0 : valid_array2[i];
-                        end
+                        end*/
+                        valid_array2[index*(Line_Size / 4) + 3] <= 1'b0;
+                        valid_array2[index*(Line_Size / 4) + 2] <= 1'b0;
+                        valid_array2[index*(Line_Size / 4) + 1] <= 1'b0;
+                        valid_array2[index*(Line_Size / 4) ] <= 1'b0;
                 end
                 else if(m_rvalid && m_rready && bank_replaced_reg[1])
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                       /* for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 valid_array2[i] <= i == index ? (rindex == 'd0 ? {valid_array2[i][3:1],1'b1}
                                                                 :(rindex == 'd1 ? {valid_array2[i][3:2],1'b1,valid_array2[i][0]}
                                                                 :(rindex == 'd2 ? {valid_array2[i][3],1'b1,valid_array2[i][1:0]}
                                                                 :{1'b1,valid_array2[i][2:0]}))) 
                                                    : valid_array2[i];
-                        end 
+                        end */
+                        if(rindex == 'd3)
+                                valid_array2[index*(Line_Size / 4) + 3] <= 1'b1;
+                        else if(rindex == 'd2)
+                                valid_array2[index*(Line_Size / 4) + 2] <= 1'b1;
+                        else if(rindex == 'd1)
+                                valid_array2[index*(Line_Size / 4) + 1] <= 1'b1;
+                        else if(rindex == 'd0)
+                                valid_array2[index*(Line_Size / 4) ] <= 1'b1;
                 end
-                else
+                /*else
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 valid_array2[i] <= valid_array2[i];
                         end
-                end
+                end*/
         end
         
         always @(posedge clk)
         begin
                 if(~resetn)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        /*for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 used_record_array[i] <= 2'b00;
-                        end
+                        end*/
+                        used_record_array <= 'd0;
                 end
                 else if(compare_stage && hit[0] && s_rready || bank_replaced_reg[0] && accessmem_stage)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        /*for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 used_record_array[i] <= i == index ? 2'b01 : used_record_array[i];
-                        end
+                        end*/
+                        used_record_array[index*2] <= 1'b1;
+                        used_record_array[index*2 + 1] <= 1'b0;
                 end
                 else if(compare_stage && hit[1] && s_rready || bank_replaced_reg[1] && accessmem_stage)
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        /*for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 used_record_array[i] <= i == index ? 2'b10 : used_record_array[i];
-                        end
+                        end*/
+                        used_record_array[index*2] <= 1'b0;
+                        used_record_array[index*2 + 1] <= 1'b1;
                 end
-                else
+                /*else
                 begin
-                        for(i = 0; i<512 / Line_Size;i = i+1)
+                        for(i = 0; i<Index_Num;i = i+1)
                         begin
                                 used_record_array[i] <= used_record_array[i];
                         end
-                end
+                end*/
         end
         
         always @(posedge clk)
@@ -514,7 +566,7 @@ module Icache_wrapper
                 if(~resetn)
                         used_record <= 2'b00;
                 else if(accesstag_stage)
-                        used_record <= used_record_array[index];
+                        used_record <= {used_record_array[index *2 + 1], used_record_array[index *2]};
                 else
                         used_record <= used_record;
         end
@@ -531,7 +583,7 @@ module Icache_wrapper
         
         replace_police u_replace_police(
                 .used_record            (used_record),
-                .valid_array            ({way1_valid,way2_valid}),
+                .valid_array            ({way2_valid, way1_valid}),
                 
                 .bank_replaced          (bank_replaced)
         );

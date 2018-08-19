@@ -127,11 +127,14 @@ module cache_wrapper(
     wire                D_mem_rready;
     wire                D_mem_rlast;
     
+    wire                test;
+    
     reg             flush_state;
     reg             wait_inst_state;
     reg             wait_mem_state;
     reg             pc_rvalid_slot;
     reg     [31:0]  inst_slot;
+    reg             wait_bvalid;
     
     assign          Inst_Req_Ack = pc_arvalid & pc_arready | Flush;
     assign          instruction = {(pc_rdata & {32{wait_inst_state}})} ;//| (inst_slot & {32{wait_mem_state}})};
@@ -149,10 +152,23 @@ module cache_wrapper(
     assign          pc_arlen = 'd0;
     
     assign          mem_rready = Read_data_Ack;
-    assign          mem_arvalid = MemRead;
+    assign          mem_arvalid = MemRead & (((Address[31:16] != 16'hbfaf) && (Address[31:16] != 16'h9faf))| ~wait_bvalid );//(Address[31:16] != 16'hbfaf) |
     assign          mem_araddr = {Address[31:2], 2'b00};
     assign          mem_rlast = mem_rvalid;
 
+    assign          test = MemRead & wait_bvalid;
+    always @(posedge M_AXI_ACLK)
+    begin
+            if(~M_AXI_ARESETN)
+                    wait_bvalid <= 1'b0;
+            else if(~wdata_fifo_is_empty || ~waddr_fifo_is_empty)
+                    wait_bvalid <= 1'b1;
+            else if(wait_bvalid && mem_bvalid)
+                    wait_bvalid <= 1'b0;
+            else
+                    wait_bvalid <= wait_bvalid;
+    end
+    
     always @(posedge M_AXI_ACLK)
     begin
             if(~M_AXI_ARESETN)
@@ -260,6 +276,7 @@ module cache_wrapper(
             .clk    (M_AXI_ACLK),
             
             .complete   (mem_wvalid & mem_wready),
+            //.complete   (mem_bvalid & (~wdata_fifo_is_empty)),
             .wdata_pack ({Write_strb, Write_data}),
             .valid      (MemWrite & Mem_Req_Ack),
             
@@ -277,6 +294,7 @@ module cache_wrapper(
             .clk    (M_AXI_ACLK),
     
             .complete   (mem_awvalid & mem_awready),
+            //.complete   (mem_bvalid & (~wdata_fifo_is_empty)),
             .wdata_pack (Address),
             .valid      (MemWrite & Mem_Req_Ack),
     
